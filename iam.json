@@ -1,0 +1,33 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "lambda:*",
+                "dynamodb:*"
+            ],
+            "Resource": "*",
+			"Condition": {
+              "StringEquals": {
+                "aws:RequestedRegion": "us-east-1"
+              }
+            }
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:CreateRole",
+                "iam:PutRolePolicy",
+                "iam:PassRole",
+                "iam:CreatePolicy",
+                "iam:ListRoles",
+                "iam:CreateServiceLinkedRole",
+                "sts:AssumeRole",
+                "iam:UpdateAssumeRolePolicy"
+            ],
+            "Resource": "*"
+        }
+    ]
+  }

@@ -3,6 +3,21 @@
         {
             "type": "aws-sam",
             "request": "direct-invoke",
+            "name": "syncDynamoExample:index.handler (nodejs16.x)",
+            "invokeTarget": {
+                "target": "code",
+                "projectRoot": "${workspaceFolder}/syncDynamoExample",
+                "lambdaHandler": "index.handler"
+            },
+            "lambda": {
+                "runtime": "nodejs16.x",
+                "payload": {},
+                "environmentVariables": {}
+            }
+        },
+        {
+            "type": "aws-sam",
+            "request": "direct-invoke",
             "name": "exampleAWSJam2022:index.handler (nodejs16.x)",
             "invokeTarget": {
                 "target": "code",

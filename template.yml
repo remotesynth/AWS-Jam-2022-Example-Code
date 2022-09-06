@@ -1,0 +1,65 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS CloudFormation Template to run the LaunchDarkly Relay with Fargate"
+
+Resources:
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: namespace
+          AttributeType: S
+        - AttributeName: key
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: namespace
+          KeyType: HASH
+        - AttributeName: key
+          KeyType: RANGE
+      PointInTimeRecoverySpecification: 
+        PointInTimeRecoveryEnabled: true
+  LambdaToDynamoRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+  LambdaToDynamoPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: "LambdaToDynamoPolicy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Resource: !GetAtt "DynamoDBTable.Arn"
+            Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchWriteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+          - Effect: Allow
+            Action: 
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+          - Effect: Allow
+            Action: "logs:CreateLogGroup"
+            Resource: "*"
+      Roles:
+        - Ref: "LambdaToDynamoRole"
+Outputs:
+  TableName:
+    Description: "DynamoDB table."
+    Value: !Ref DynamoDBTable
