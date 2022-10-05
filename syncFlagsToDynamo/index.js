@@ -8,7 +8,7 @@ const {
 exports.handler = (event, context, callback) => {
   setTimeout(() => {
     // Replace MY_DYNAMO_TABLE_NAME with your table name
-    const store = DynamoDBFeatureStore("MY_DYNAMO_TABLE_NAME", {
+    const store = DynamoDBFeatureStore(process.env.DYNAMODB_TABLE, {
       cacheTTL: 30,
     });
 

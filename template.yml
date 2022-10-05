@@ -3,6 +3,71 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: "AWS CloudFormation Template to run the LaunchDarkly Relay with Fargate"
 
 Resources:
+  LambdaResourcesLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties: 
+      CompatibleRuntimes: 
+        - nodejs16.x
+        - nodejs14.x
+      Content: 
+        S3Bucket: !Sub aws-jam-challenge-resources-${AWS::Region}
+        S3Key: launchdarkly-lambda-dynamo/layer.zip
+      Description: This layer contains the Node SDK and DynamoDB add on
+      LayerName: ld-dependencies
+  GetFlagsStarter:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code:
+        S3Bucket: !Sub aws-jam-challenge-resources-${AWS::Region}
+        S3Key: launchdarkly-lambda-dynamo/getFlagsStarter.zip
+      Description: Function to retrieve the API based upon a flag
+      Environment: 
+        Variables:
+          DYNAMODB_TABLE: !Ref DynamoDBTable
+          LAUNCHDARKLY_SDK_KEY: "YOUR_SDK_KEY"
+      FunctionName: getFlagsStarter
+      Layers: 
+        - !Ref LambdaResourcesLayer
+      PackageType: Zip
+      Handler: index.handler
+      Role: !GetAtt "LambdaToDynamoRole.Arn"
+      Runtime: nodejs16.x
+      Timeout: 10
+  SyncFlagsToDynamo:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code:
+        S3Bucket: !Sub aws-jam-challenge-resources-${AWS::Region}
+        S3Key: launchdarkly-lambda-dynamo/syncFlagsToDynamo.zip
+      Description: Synchronize flag data from LaunchDarkly to DynamoDB
+      Environment: 
+        Variables:
+          DYNAMODB_TABLE: !Ref DynamoDBTable
+          LAUNCHDARKLY_SDK_KEY: "YOUR_SDK_KEY"
+      FunctionName: syncFlagsToDynamo
+      Layers: 
+        - !Ref LambdaResourcesLayer
+      PackageType: Zip
+      Handler: index.handler
+      Role: !GetAtt "LambdaToDynamoRole.Arn"
+      Runtime: nodejs16.x
+      Timeout: 10
+  SyncFlagsFunctionURL:
+    Type: AWS::Lambda::Url
+    Properties: 
+      AuthType: NONE
+      Cors: 
+        AllowOrigins:
+          - "*"
+        AllowCredentials: false
+      TargetFunctionArn: !GetAtt "SyncFlagsToDynamo.Arn"
+  FunctionURLPermissions:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      Action: lambda:invokeFunctionUrl
+      FunctionName: !Ref SyncFlagsToDynamo
+      FunctionUrlAuthType: NONE
+      Principal: "*"
   DynamoDBTable:
     Type: AWS::DynamoDB::Table
     Properties:

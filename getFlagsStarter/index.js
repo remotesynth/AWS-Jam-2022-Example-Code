@@ -10,7 +10,7 @@ exports.handler = async (event) => {
     key: "anonymous",
   };
 
-  const apiVersion = await client.variationDetail("api-version", user, false);
+  const apiVersion = "Implement LaunchDarkly call";
 
   const response = {
     statusCode: 200,

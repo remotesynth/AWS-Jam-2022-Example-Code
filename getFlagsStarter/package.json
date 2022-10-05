@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "launchdarkly-node-server-sdk": "^6.4.2"
+    "launchdarkly-node-server-sdk": "^6.4.2",
+    "node-fetch": "^2.6.7"
   }
 }
