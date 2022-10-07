@@ -7,7 +7,6 @@ const {
 } = require("launchdarkly-node-server-sdk-dynamodb");
 
 exports.handler = async (event) => {
-  // Replace MY_DYNAMO_TABLE_NAME with your table name
   const store = DynamoDBFeatureStore(process.env.DYNAMODB_TABLE, {
     cacheTTL: 30,
   });
