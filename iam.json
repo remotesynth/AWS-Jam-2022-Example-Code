@@ -5,12 +5,25 @@
             "Effect": "Allow",
             "Action": [
                 "lambda:*",
-                "dynamodb:*"
+                "dynamodb:GetItem",
+                "dynamodb:BatchGetItem",
+                "dynamodb:Scan",
+                "dynamodb:Query",
+                "dynamodb:ConditionCheckItem",
+                "dynamodb:ListTables",
+                "dynamodb:DescribeTable",
+                "dynamodb:Query",
+                "dynamodb:GetRecords",
+                "dynamodb:Scan"
             ],
             "Resource": "*",
 			"Condition": {
               "StringEquals": {
-                "aws:RequestedRegion": "us-east-1"
+                "aws:RequestedRegion": [
+                    "us-east-1",
+                    "us-west-2",
+                    "eu-west-1"
+                ]
               }
             }
         },
