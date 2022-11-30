@@ -3,21 +3,141 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: "AWS CloudFormation Template to run the LaunchDarkly Relay with Fargate"
 
 Parameters:
-  TableName:
-    Description: name of the DynamoDB table generated
+  Stage:
+    Description: name of stage, e.g. dev, test, staging, prod
     Type: String
+    Default: dev
   ApiKey:
     Description: LaunchDarkly SDK key
     Type: String
     MinLength: 36 # should be sdk-{36 chars}
+  TableNameParamNamePrefix:
+    Description: |
+      Prefix the name of the SSM parameter used to store the DynamoDB table name.
+
+      For example, a prefix of "/Foo" will create an SSM param named "/Foo/LaunchDarklyRelay/TableName"
+    Type: String
+    Default: ""
 
 Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: namespace
+          AttributeType: S
+        - AttributeName: key
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: namespace
+          KeyType: HASH
+        - AttributeName: key
+          KeyType: RANGE
+
+  TableNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${TableNameParamNamePrefix}/LaunchDarklyRelay/TableName"
+      Type: String
+      Value: !Ref Table
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref AWS::StackName
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RootPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:*Item
+                Resource: !GetAtt "Table.Arn"
+
+  # the role ECS uses to start tasks
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns: # use the managed policy (mirrors what the console does)
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      TaskRoleArn: !GetAtt "TaskRole.Arn"
+      ExecutionRoleArn: !GetAtt "TaskExecutionRole.Arn"
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Family: !Ref AWS::StackName
+      Cpu: "512"
+      Memory: "1024"
+      ContainerDefinitions:
+        - Name: ld-relay
+          Image: launchdarkly/ld-relay
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          PortMappings:
+            - HostPort: 8030
+              Protocol: tcp
+              ContainerPort: 8030
+          Cpu: 512
+          MemoryReservation: 1024
+          Environment:
+            - Name: DYNAMODB_TABLE
+              Value: !Ref Table
+            - Name: EXIT_ON_ERROR
+              Value: "true"
+            - Name: USE_DYNAMODB
+              Value: "true"
+            - Name: LD_ENV_production
+              Value: !Ref ApiKey
 
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/ecs/${AWS::StackName}"
       RetentionInDays: 7
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !GetAtt "Cluster.Arn"
+      DesiredCount: 1 # should only need one instance of the relay at a time
+      LaunchType: FARGATE
+      TaskDefinition: !Ref TaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ServiceSecurityGroup
+          Subnets:
+            - !Ref SubnetAz
 
   ServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -29,11 +149,7 @@ Resources:
           FromPort: 8030
           ToPort: 8030
           CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 8030
-          ToPort: 8030
-          CidrIp: 0.0.0.0/0
+
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -90,55 +206,19 @@ Resources:
       SubnetId: !Ref SubnetAz
       RouteTableId: !Ref RouteViaIgw
 
-  Cluster:
-      Type: AWS::ECS::Cluster
-      Properties:
-        ClusterName: !Ref AWS::StackName
+Outputs:
+  TableName:
+    Description: "DynamoDB table."
+    Value: !Ref Table
 
-  TaskDefinition:
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      TaskRoleArn: !GetAtt "TaskRole.Arn"
-      ExecutionRoleArn: !GetAtt "TaskExecutionRole.Arn"
-      RequiresCompatibilities:
-        - FARGATE
-      NetworkMode: awsvpc
-      Family: !Ref AWS::StackName
-      Cpu: "512"
-      Memory: "1024"
-      ContainerDefinitions:
-        - Name: ld-relay
-          Image: launchdarkly/ld-relay:v5
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Ref LogGroup
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: ecs
-          PortMappings:
-            - HostPort: 8030
-              Protocol: tcp
-              ContainerPort: 8030
-          Cpu: 512
-          MemoryReservation: 1024
-          Environment:
-            - Name: DYNAMODB_TABLE
-              Value: !Ref TableName
-            - Name: EXIT_ON_ERROR
-              Value: "true"
-            - Name: USE_DYNAMODB
-              Value: "true"
-            - Name: LD_ENV_production
-              Value: !Ref ApiKey
-  # the role ECS uses to start tasks
+  Cluster:
+    Description: "Fargate cluster."
+    Value: !Ref Cluster
+
+  TaskRole:
+    Description: "Task role (used by the relay)."
+    Value: !Ref TaskRole
+
   TaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns: # use the managed policy (mirrors what the console does)
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+    Description: "Task execution role (used by ECS)."
+    Value: !Ref TaskExecutionRole
